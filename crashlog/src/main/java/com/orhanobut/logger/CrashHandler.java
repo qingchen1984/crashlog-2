@@ -247,13 +247,19 @@ public class CrashHandler implements UncaughtExceptionHandler {
             hasWritePermissions = mContext.checkSelfPermission(Manifest.permission
                     .WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
         }
+
         if (hasWritePermissions && isSDCardExist && isRootDirExist) {
             file_dir = Environment.getExternalStorageDirectory()
                     .getAbsolutePath() + "/crashlog/" + getApplicationName()
                     + "/" + getVersion() + "/";
         } else {
-            file_dir = mContext.getExternalCacheDir().getAbsolutePath() + "/crashlog/"
-                    + getApplicationName() + "/" + getVersion() + "/";
+            if (isSDCardExist && isRootDirExist) {
+                file_dir = mContext.getExternalCacheDir().getAbsolutePath() + "/crashlog/"
+                        + getApplicationName() + "/" + getVersion() + "/";
+            } else {
+                file_dir = mContext.getFilesDir().getAbsolutePath() + "/crashlog/"
+                        + getApplicationName() + "/" + getVersion() + "/";
+            }
         }
         return file_dir;
     }
