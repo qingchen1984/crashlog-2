@@ -252,7 +252,7 @@ public class CrashHandler implements UncaughtExceptionHandler {
                     .getAbsolutePath() + "/crashlog/" + getApplicationName()
                     + "/" + getVersion() + "/";
         } else {
-            file_dir = mContext.getFilesDir().getAbsolutePath() + "/crashlog/"
+            file_dir = mContext.getExternalCacheDir().getAbsolutePath() + "/crashlog/"
                     + getApplicationName() + "/" + getVersion() + "/";
         }
         return file_dir;
