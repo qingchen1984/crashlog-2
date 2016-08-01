@@ -1,6 +1,8 @@
 package com.orhanobut.logger;
 
+import android.Manifest;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
@@ -25,11 +27,12 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * UncaughtException处理类,当程序发生Uncaught异常的时候,有该类来接管程序,并记录发送错误报告.
- * 需要在Application中注册，为了要在程序启动器就监控整个程序。
+ * UncaughtException处理类,当程序发生Uncaught异常的时候,有该类来接管程序,并记录错误报告.
+ * 为了要在程序启动器就监控整个程序,需要在Application中注册。
  */
 public class CrashHandler implements UncaughtExceptionHandler {
     public static final String TAG = "CrashHandler";
+    private static final String ClassName = CrashHandler.class.getCanonicalName();
     // 系统默认的UncaughtException处理类
     private UncaughtExceptionHandler mDefaultHandler;
     // CrashHandler实例
@@ -60,31 +63,21 @@ public class CrashHandler implements UncaughtExceptionHandler {
         return instance;
     }
 
+    public Context getContext() {
+        return mContext;
+    }
+
     /**
      * 初始化
      */
     public void init(Context context) {
-        mContext = context;
+        mContext = context.getApplicationContext();
         // 获取系统默认的UncaughtException处理器
         mDefaultHandler = Thread.getDefaultUncaughtExceptionHandler();
         // 设置该CrashHandler为程序的默认处理器
         Thread.setDefaultUncaughtExceptionHandler(this);
 
         enanbleToast(isDebugable());
-    }
-
-    public boolean isDebugable() {
-        if (mContext == null) {
-            return false;
-        }
-
-        try {
-            return (mContext.getApplicationContext().getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE)
-                    != 0;
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return false;
     }
 
     public boolean isInited() {
@@ -96,19 +89,17 @@ public class CrashHandler implements UncaughtExceptionHandler {
     }
 
     /**
-     * 是否打开报错时提示
-     *
-     * @param showToast
-     */
-    public void enanbleToast(boolean showToast) {
-        this.showToast = showToast;
-    }
-
-    /**
      * 当UncaughtException发生时会转入该函数来处理
      */
     @Override
     public void uncaughtException(Thread thread, Throwable ex) {
+        if (mContext != null) {
+            SharedPreferences sharedPreferences = mContext.getSharedPreferences(ClassName, Context
+                    .MODE_PRIVATE);
+            sharedPreferences.edit().putBoolean(ClassName, true).apply(); //记录崩溃
+            sharedPreferences.edit().putInt(ClassName + "_hashcode", mContext.hashCode()).apply(); //记录崩溃
+        }
+
         if (!handleException(ex) && mDefaultHandler != null) {
             // 如果用户没有处理则让系统默认的异常处理器来处理
             mDefaultHandler.uncaughtException(thread, ex);
@@ -118,8 +109,8 @@ public class CrashHandler implements UncaughtExceptionHandler {
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
+
             // 退出程序
-//			Log.e(TAG, "程序异常退出");
             ex.printStackTrace();
             android.os.Process.killProcess(android.os.Process.myPid());
             System.exit(1);
@@ -133,14 +124,13 @@ public class CrashHandler implements UncaughtExceptionHandler {
      * @return true:如果处理了该异常信息;否则返回false.
      */
     public boolean handleException(Throwable ex) {
+        if (!isInited()) {
+            Log.d(TAG, "CrashHandler has not been inited!!!");
+            return false;
+        }
         if (ex == null) {
             return false;
         }
-
-//        if (ex instanceof SQLiteFullException) {
-//            //数据库或磁盘已满异常
-//
-//        }
 
         ex.printStackTrace();
 
@@ -149,19 +139,46 @@ public class CrashHandler implements UncaughtExceptionHandler {
         // 保存日志文件
         saveCatchInfo2File(ex);
 
-        // 使用Toast来显示异常信息
-        if (showToast) {
+        if (showToast) {// 使用Toast来显示异常信息
             new Thread() {
                 @Override
                 public void run() {
                     Looper.prepare();
-                    Toast.makeText(mContext, "error accur",
+                    Toast.makeText(mContext, "error accour",
                             Toast.LENGTH_SHORT).show();
                     Looper.loop();
                 }
             }.start();
         }
         return true;
+    }
+
+    public static void clearCrashlog(Context context) {
+        if (!CrashHandler.getInstance().isInited()) {
+            Log.d(TAG, "CrashHandler has not been inited!!!");
+        }
+
+        SharedPreferences sharedPreferences = context.getSharedPreferences(ClassName, Context
+                .MODE_PRIVATE);
+        sharedPreferences.edit().putBoolean(ClassName, false).apply();
+        sharedPreferences.edit().putInt(ClassName + "_hashcode", 0).apply();
+    }
+
+    //判断本次启动是否从崩溃中恢复启动
+    public static boolean isStartfromCrash(Context context) {
+        if (!CrashHandler.getInstance().isInited()) {
+            Log.d(TAG, "CrashHandler has not been inited!!!");
+            return false;
+        }
+
+        SharedPreferences sharedPreferences = context.getSharedPreferences(ClassName, Context
+                .MODE_PRIVATE);
+        int hashCode = sharedPreferences.getInt(ClassName + "_hashcode", 0);
+        if (sharedPreferences.getBoolean(ClassName, false) && (hashCode != 0 && hashCode != context
+                .getApplicationContext().hashCode())) {
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -194,26 +211,47 @@ public class CrashHandler implements UncaughtExceptionHandler {
                 Log.e(TAG, "an error occured when collect crash info", e);
             }
         }
+    }
 
+    public boolean isDebugable() {
+        if (mContext == null) {
+            return false;
+        }
+
+        try {
+            return (mContext.getApplicationContext().getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE)
+                    != 0;
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    /**
+     * 是否打开报错时提示
+     *
+     * @param showToast
+     */
+    public void enanbleToast(boolean showToast) {
+        this.showToast = showToast;
     }
 
     private String getFilePath() {
         String file_dir = "";
-        // SD卡是否存在
         boolean isSDCardExist = Environment.MEDIA_MOUNTED.equals(Environment
-                .getExternalStorageState());
-        // Environment.getExternalStorageDirectory()相当于File file=new
-        // File("/sdcard")
+                .getExternalStorageState()); // SD卡是否存在
         boolean isRootDirExist = Environment.getExternalStorageDirectory()
                 .exists();
-        if (isSDCardExist && isRootDirExist) {
+        boolean hasWritePermissions = true;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {//6.0及以后版本系统,检查是否有磁盘读写权限
+            hasWritePermissions = mContext.checkSelfPermission(Manifest.permission
+                    .WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
+        }
+        if (hasWritePermissions && isSDCardExist && isRootDirExist) {
             file_dir = Environment.getExternalStorageDirectory()
-                    .getAbsolutePath()
-                    + "/crashlog/"
-                    + getApplicationName()
+                    .getAbsolutePath() + "/crashlog/" + getApplicationName()
                     + "/" + getVersion() + "/";
         } else {
-            // MyApplication.getInstance().getFilesDir()返回的路劲为/data/data/PACKAGE_NAME/files，其中的包就是我们建立的主Activity所在的包
             file_dir = mContext.getFilesDir().getAbsolutePath() + "/crashlog/"
                     + getApplicationName() + "/" + getVersion() + "/";
         }
@@ -262,24 +300,6 @@ public class CrashHandler implements UncaughtExceptionHandler {
         return info.versionCode + "_" + info.versionName;
     }
 
-    public Context getContext() {
-        return mContext;
-    }
-
-    //保存日志信息到本地文件
-    public static void saveLogInfo2File(String log) {
-        if (CrashHandler.getInstance().isInited() == false) {
-            Log.d(TAG, "CrashHandler has not been inited!!!");
-            CrashHandler.getInstance().saveCatchInfo2File("CrashHandler has not been inited!!!",
-                    false);
-            return;
-        }
-
-        Log.d(TAG, log);
-        CrashHandler.getInstance().collectDeviceInfo(CrashHandler.getInstance().getContext());
-        CrashHandler.getInstance().saveCatchInfo2File(log, false);
-    }
-
     /**
      * 保存错误信息到文件中
      *
@@ -321,9 +341,7 @@ public class CrashHandler implements UncaughtExceptionHandler {
             String time = formatter.format(new Date());
             String fileName = "crash" + (exception ? "" : "log") + "-" + time + "-" + timestamp + ".log";
             String file_dir = getFilePath();
-            // if
-            // (Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED))
-            // {
+
             File dir = new File(file_dir);
             if (!dir.exists()) {
                 dir.mkdirs();
@@ -334,8 +352,7 @@ public class CrashHandler implements UncaughtExceptionHandler {
             }
             FileOutputStream fos = new FileOutputStream(file);
             fos.write(sb.toString().getBytes());
-            // 发送给开发人员
-            sendCrashLog2PM(file_dir + fileName);
+            // TODO: 16/8/1 在这里可以将错误报告发给开发者
             fos.close();
             // }
             return fileName;
@@ -345,96 +362,4 @@ public class CrashHandler implements UncaughtExceptionHandler {
         return null;
     }
 
-    /**
-     * 将捕获的导致崩溃的错误信息发送给开发人员 目前只将log日志保存在sdcard 和输出到LogCat中，并未发送给后台。
-     */
-    private void sendCrashLog2PM(String fileName) {
-        if (!new File(fileName).exists()) {
-            Toast.makeText(mContext, "日志文件不存在！", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-    }
-
-    //停止使用
-//    class sdLogThread extends Thread {
-//        public final String filename;
-//        private OutputStream outputStream;
-//
-//        public sdLogThread(String filename) {
-//            this.filename = filename;
-//        }
-//
-//        @Override
-//        public void run() {
-//            InetSocketAddress target = new InetSocketAddress("172.27.29.1",
-//                    6789);
-//            InetSocketAddress target2 = new InetSocketAddress("192.168.0.112",
-//                    6789);
-//            Socket socket = new Socket();
-//            try {
-//                socket.connect(target);
-//                outputStream = socket.getOutputStream();
-//            } catch (IOException e) {
-//                try {
-//                    socket.connect(target2);
-//                    outputStream = socket.getOutputStream();
-//                } catch (IOException e1) {
-//                    return;
-//                }
-//            }
-//
-//            FileInputStream fis = null;
-//            BufferedReader reader = null;
-//            String s = null;
-//            try {
-//                fis = new FileInputStream(filename);
-//                reader = new BufferedReader(new InputStreamReader(fis, "GBK"));
-//                while (true) {
-//                    s = reader.readLine();
-//                    if (s == null)
-//                        break;
-//                    // 由于目前尚未确定以何种方式发送，所以先打出log日志。
-//                    Log.i("info", s.toString());
-//                    sendDataAtTime(s.getBytes());
-//                }
-//            } catch (FileNotFoundException e) {
-//                e.printStackTrace();
-//            } catch (IOException e) {
-//                e.printStackTrace();
-//            } finally { // 关闭流
-//                try {
-//                    reader.close();
-//                    fis.close();
-//                } catch (IOException e) {
-//                    e.printStackTrace();
-//                }
-//                try {
-//                    socket.close();
-//                    socket = null;
-//
-//                    if (outputStream != null) {
-//                        outputStream.close();
-//                        outputStream = null;
-//                    }
-//                } catch (IOException e) {
-//                    e.printStackTrace();
-//                }
-//            }
-//        }
-//
-//        // 立即发送消息
-//        private boolean sendDataAtTime(byte[] data) {
-//            if (outputStream != null) {
-//                try {
-//                    outputStream.write(data, 0, data.length);
-//                    return true;
-//                } catch (IOException e) {
-//                    e.printStackTrace();
-//                }
-//            }
-//            return false;
-//        }
-//
-//    }
 }

@@ -1,5 +1,10 @@
 # crashlog
 
+##Features:
+* catch the crash,save to log file
+* check current start is or not from crash
+* it works well at Android-23 or later
+
 grab via Gradle:
 
 compile 'com.simen.crashlog:crashlog:1.0.0'
