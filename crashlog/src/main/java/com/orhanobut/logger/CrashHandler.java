@@ -2,11 +2,13 @@ package com.orhanobut.logger;
 
 import android.Manifest;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
 import android.os.Looper;
@@ -41,6 +43,7 @@ public class CrashHandler implements UncaughtExceptionHandler {
     private Context mContext;
 
     private boolean showToast = true;
+    private boolean auto_open = false;
 
     // 用来存储设备信息和异常信息
     private Map<String, String> infos = new HashMap<>();
@@ -76,8 +79,6 @@ public class CrashHandler implements UncaughtExceptionHandler {
         mDefaultHandler = Thread.getDefaultUncaughtExceptionHandler();
         // 设置该CrashHandler为程序的默认处理器
         Thread.setDefaultUncaughtExceptionHandler(this);
-
-        enanbleToast(isDebugable());
     }
 
     public boolean isInited() {
@@ -137,7 +138,16 @@ public class CrashHandler implements UncaughtExceptionHandler {
         // 收集设备参数信息
         collectDeviceInfo(mContext);
         // 保存日志文件
-        saveCatchInfo2File(ex);
+        final String logFilePath = saveCatchInfo2File(ex);
+        if (auto_open && mContext != null && shouldShowCrash()) {//自动打开日志文件
+
+            Intent viewIntent = new Intent(Intent.ACTION_VIEW);
+            viewIntent.setDataAndType(Uri.fromFile(new File(logFilePath)), "text/plain");
+            if (viewIntent.resolveActivity(mContext.getPackageManager()) != null) {
+                viewIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                mContext.startActivity(viewIntent);
+            }
+        }
 
         if (showToast) {// 使用Toast来显示异常信息
             new Thread() {
@@ -153,32 +163,31 @@ public class CrashHandler implements UncaughtExceptionHandler {
         return true;
     }
 
-    public static void clearCrashlog(Context context) {
-        if (!CrashHandler.getInstance().isInited()) {
-            Log.d(TAG, "CrashHandler has not been inited!!!");
-        }
-
-        SharedPreferences sharedPreferences = context.getSharedPreferences(ClassName, Context
-                .MODE_PRIVATE);
-        sharedPreferences.edit().putBoolean(ClassName, false).apply();
-        sharedPreferences.edit().putInt(ClassName + "_hashcode", 0).apply();
-    }
-
-    //判断本次启动是否从崩溃中恢复启动
-    public static boolean isStartfromCrash(Context context) {
-        if (!CrashHandler.getInstance().isInited()) {
-            Log.d(TAG, "CrashHandler has not been inited!!!");
+    private boolean shouldShowCrash() {
+        if (mContext == null) {
             return false;
         }
 
-        SharedPreferences sharedPreferences = context.getSharedPreferences(ClassName, Context
+        SharedPreferences preferences = mContext.getSharedPreferences(ClassName, Context
                 .MODE_PRIVATE);
-        int hashCode = sharedPreferences.getInt(ClassName + "_hashcode", 0);
-        if (sharedPreferences.getBoolean(ClassName, false) && (hashCode != 0 && hashCode != context
-                .getApplicationContext().hashCode())) {
-            return true;
+        long now = System.currentTimeMillis();
+        long time = preferences.getLong(ClassName + "_time", now);
+        preferences.edit().putLong(ClassName + "_time", now).commit();
+        if (now - time < 5000) {
+            return false;
         }
-        return false;
+        return true;
+    }
+
+    /**
+     * 是否在发生crash时,自动打开日志文件
+     *
+     * @param auto_open true,自动打开;false,不打开
+     * @return
+     */
+    public CrashHandler AutoOpenCrash(boolean auto_open) {
+        this.auto_open = auto_open;
+        return this;
     }
 
     /**
@@ -345,7 +354,7 @@ public class CrashHandler implements UncaughtExceptionHandler {
         try {
             long timestamp = System.currentTimeMillis();
             String time = formatter.format(new Date());
-            String fileName = "crash" + (exception ? "" : "log") + "-" + time + "-" + timestamp + ".log";
+            String fileName = "crash" + (exception ? "" : "log") + "-" + time + "-" + timestamp + ".txt";
             String file_dir = getFilePath();
 
             File dir = new File(file_dir);
@@ -361,7 +370,7 @@ public class CrashHandler implements UncaughtExceptionHandler {
             // TODO: 16/8/1 在这里可以将错误报告发给开发者
             fos.close();
             // }
-            return fileName;
+            return file.getAbsolutePath();
         } catch (Exception e) {
             Log.e(TAG, "an error occured while writing file...", e);
         }
