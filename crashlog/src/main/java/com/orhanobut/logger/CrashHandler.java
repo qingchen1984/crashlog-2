@@ -34,7 +34,7 @@ import java.util.Map;
  */
 public class CrashHandler implements UncaughtExceptionHandler {
     public static final String TAG = "CrashHandler";
-    private static final String ClassName = CrashHandler.class.getCanonicalName();
+    private static final String ClassName = "com.orhanobut.logger.CrashHandler";
     // 系统默认的UncaughtException处理类
     private UncaughtExceptionHandler mDefaultHandler;
     // CrashHandler实例
@@ -82,11 +82,7 @@ public class CrashHandler implements UncaughtExceptionHandler {
     }
 
     public boolean isInited() {
-        if (mContext == null || mDefaultHandler == null) {
-            return false;
-        }
-
-        return true;
+        return !(mContext == null || mDefaultHandler == null);
     }
 
     /**
@@ -173,10 +169,7 @@ public class CrashHandler implements UncaughtExceptionHandler {
         long now = System.currentTimeMillis();
         long time = preferences.getLong(ClassName + "_time", now);
         preferences.edit().putLong(ClassName + "_time", now).commit();
-        if (now - time < 5000) {
-            return false;
-        }
-        return true;
+        return now - time >= 5000;
     }
 
     /**
@@ -186,6 +179,10 @@ public class CrashHandler implements UncaughtExceptionHandler {
      * @return
      */
     public CrashHandler AutoOpenCrash(boolean auto_open) {
+        if (!isInited()) {
+            Log.d(TAG, "CrashHandler has not been inited!!!");
+            throw new RuntimeException("CrashHandler has not been inited!!!");
+        }
         this.auto_open = auto_open;
         return this;
     }
@@ -241,8 +238,14 @@ public class CrashHandler implements UncaughtExceptionHandler {
      *
      * @param showToast
      */
-    public void enanbleToast(boolean showToast) {
+    public CrashHandler enanbleToast(boolean showToast) {
+        if (!isInited()) {
+            Log.d(TAG, "CrashHandler has not been inited!!!");
+            throw new RuntimeException("CrashHandler has not been inited!!!");
+        }
+
         this.showToast = showToast;
+        return this;
     }
 
     private String getFilePath() {

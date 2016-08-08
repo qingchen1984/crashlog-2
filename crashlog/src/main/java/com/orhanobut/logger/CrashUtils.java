@@ -9,7 +9,7 @@ import android.util.Log;
  */
 public class CrashUtils {
     private static final String TAG = "CrashUtils";
-    private static final String ClassName = CrashHandler.class.getCanonicalName();
+    private static final String ClassName = "com.orhanobut.logger.CrashHandler";
 
     public static void clearCrashlog(Context context) {
         if (!CrashHandler.getInstance().isInited()) {
@@ -32,10 +32,7 @@ public class CrashUtils {
         SharedPreferences sharedPreferences = context.getSharedPreferences(ClassName, Context
                 .MODE_PRIVATE);
         int hashCode = sharedPreferences.getInt(ClassName + "_hashcode", 0);
-        if (sharedPreferences.getBoolean(ClassName, false) && (hashCode != 0 && hashCode != context
-                .getApplicationContext().hashCode())) {
-            return true;
-        }
-        return false;
+        return sharedPreferences.getBoolean(ClassName, false) && (hashCode != 0 && hashCode != context
+                .getApplicationContext().hashCode());
     }
 }
