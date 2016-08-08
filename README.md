@@ -4,10 +4,11 @@
 * catch the crash,save to log file
 * check current start is or not from crash
 * it works well at Android-23 or later
+* auto open the log file when crash accured
 
 grab via Gradle:
 
-compile 'com.simen.crashlog:crashlog:1.1.0'
+compile 'com.simen.crashlog:crashlog:1.2.0'
 
 ##sample code
 ```Android
